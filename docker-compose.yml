@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: receipt-processor
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    command: ["./receipt-processor"]
