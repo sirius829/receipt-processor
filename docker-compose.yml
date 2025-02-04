@@ -12,3 +12,12 @@ services:
     volumes:
       - .:/app
     command: ["./receipt-processor"]
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: receipt-processor-test
+    volumes:
+      - .:/app
+    command: ["go", "test", "-v", "./..."]
