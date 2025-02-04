@@ -1,58 +1,35 @@
-package main
+package handlers
 
 import (
 	"encoding/json"
 	"log"
 	"math"
 	"net/http"
+	"receipt-processor/internal/models"
+	"receipt-processor/internal/store"
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
-var (
-	receipts   = make(map[string]Receipt)
-	storeMutex sync.RWMutex
-)
-
-func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/receipts/process", processReceiptHandler).Methods("POST")
-	r.HandleFunc("/receipts/{id}/points", getPointsHandler).Methods("GET")
-	r.Use(loggingMiddleware)
-
-	log.Println("Server starting on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+type Handler struct {
+	logger *log.Logger
+	store  store.Store
 }
 
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Received %s request for %s", r.Method, r.URL.Path)
-		next.ServeHTTP(w, r)
-	})
-}
-
-type Receipt struct {
-	Retailer     string `json:"retailer"`
-	PurchaseDate string `json:"purchaseDate"`
-	PurchaseTime string `json:"purchaseTime"`
-	Items        []Item `json:"items"`
-	Total        string `json:"total"`
-}
-
-type Item struct {
-	ShortDescription string `json:"shortDescription"`
-	Price            string `json:"price"`
+func NewHandler(logger *log.Logger) *Handler {
+	return &Handler{
+		logger: logger,
+		store:  store.NewMemoryStore(),
+	}
 }
 
 // processReceiptHandler handles POST /receipts/process
-func processReceiptHandler(w http.ResponseWriter, r *http.Request) {
-	var receipt Receipt
+func (h *Handler) ProcessReceiptHandler(w http.ResponseWriter, r *http.Request) {
+	var receipt models.Receipt
 
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&receipt); err != nil {
@@ -65,16 +42,46 @@ func processReceiptHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := uuid.New().String()
+	id := store.GenerateID()
 
-	storeMutex.Lock()
-	receipts[id] = receipt
-	storeMutex.Unlock()
+	h.store.Save(id, receipt)
 
 	json.NewEncoder(w).Encode(map[string]string{"id": id})
 }
 
-func validateReceipt(r Receipt) bool {
+// getPointsHandler handles GET /receipts/{id}/points
+func (h *Handler) GetPointsHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	receipt, ok := h.store.Get(id)
+
+	if !ok {
+		http.Error(w, "No receipt found for that ID.", http.StatusNotFound)
+		return
+	}
+
+	points, err := calculatePoints(receipt)
+	if err != nil {
+		http.Error(w, "Error calculating points", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]int{"points": points})
+}
+
+// LoggingMiddleware logs incoming requests
+func LoggingMiddleware(logger *log.Logger) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger.Printf("Received %s request for %s", r.Method, r.RequestURI)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// validateReceipt check the receipt is valid
+func validateReceipt(r models.Receipt) bool {
 	retailerRe := regexp.MustCompile(`^[\w\s\-\&]+$`)
 	if !retailerRe.MatchString(r.Retailer) {
 		return false
@@ -111,31 +118,8 @@ func validateReceipt(r Receipt) bool {
 	return true
 }
 
-// getPointsHandler handles GET /receipts/{id}/points
-func getPointsHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
-
-	storeMutex.RLock()
-	receipt, ok := receipts[id]
-	storeMutex.RUnlock()
-
-	if !ok {
-		http.Error(w, "No receipt found for that ID.", http.StatusNotFound)
-		return
-	}
-
-	points, err := calculatePoints(receipt)
-	if err != nil {
-		http.Error(w, "Error calculating points", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]int{"points": points})
-}
-
 // calculatePoints calculate the points for given receipt and given condition on readme
-func calculatePoints(r Receipt) (int, error) {
+func calculatePoints(r models.Receipt) (int, error) {
 	points := 0
 
 	// Rule 1: 1 point for every alphanumeric character in the retailer name

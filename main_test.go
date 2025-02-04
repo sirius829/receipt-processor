@@ -3,23 +3,30 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"receipt-processor/internal/handlers"
+
+	// "receipt-processor/internal/models"
 	"testing"
 
 	"github.com/gorilla/mux"
 )
 
 func setupRouter() *mux.Router {
+	logger := log.New(os.Stdout, "receipt-processor: ", log.LstdFlags)
 	router := mux.NewRouter()
-	router.HandleFunc("/receipts/process", processReceiptHandler).Methods("POST")
-	router.HandleFunc("/receipts/{id}/points", getPointsHandler).Methods("GET")
-	router.Use(loggingMiddleware)
+	h := handlers.NewHandler(logger)
+	router.HandleFunc("/receipts/process", h.ProcessReceiptHandler).Methods("POST")
+	router.HandleFunc("/receipts/{id}/points", h.GetPointsHandler).Methods("GET")
+	router.Use(handlers.LoggingMiddleware(logger))
 	return router
 }
 
 func TestReceiptProcessingAndPointsRetrieval(t *testing.T) {
-	receipts = make(map[string]Receipt)
+	// receipts = make(map[string]models.Receipt)
 
 	router := setupRouter()
 
