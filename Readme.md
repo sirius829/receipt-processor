@@ -14,7 +14,7 @@ The service exposes a RESTful API that allows you to submit receipts and later r
 
 The Receipt Processor service accepts a JSON receipt via the **POST /receipts/process** endpoint and returns an ID. 
 You can then retrieve the points awarded for that receipt by calling the **GET /receipts/{id}/points** endpoint.
-The points calculation is based on several rules (such as counting alphanumeric characters in the retailer's name, checking total amounts, bonus for certain item descriptions, etc.).
+The points calculation is based on several rules (such as counting alphanumeric characters in the retailer's name, checking total amounts, bonus for certain item descriptions, etc).
 
 ## API Specification
 
