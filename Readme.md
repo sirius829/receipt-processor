@@ -2,6 +2,7 @@
 
 A simple web service that processes receipts and awards points based on defined rules.
 The service exposes a RESTful API that allows you to submit receipts and later retrieve the points awarded.
+This project also demonstrates the building of a RESTful API using Go, along with Dockerization for seamless deployment and scalability.
 
 ## Table of Contents
 
